@@ -17,41 +17,58 @@ const SecretPage3 = () => {
     const fetchUserAndFriends = async () => {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData?.user) {
-        window.location.href = '/'; // Redirect if not authenticated
+        window.location.href = '/'; 
         return;
       }
-
+  
       setUserId(userData.user.id);
 
       const { data: friendsData, error: friendsError } = await supabase
         .from('friends')
-        .select(`
-          id, status, 
-          requester_id, recipient_id,
-          requester:user_id!inner(id, name),
-          recipient:recipient_id!inner(id, name)
-        `)
+        .select('id, status, requester_id, recipient_id')
         .or(`requester_id.eq.${userData.user.id},recipient_id.eq.${userData.user.id}`);
-
+  
       if (friendsError) {
         alert(friendsError.message);
         return;
       }
+  
+      const userIds = [
+        ...new Set(
+          friendsData.flatMap(friend => [friend.requester_id, friend.recipient_id])
+        ),
+      ];
+  
+      const { data: usersData, error: usersError } = await supabase
+        .from('auth.users')
+        .select('id, name')
+        .in('id', userIds);
+  
+      if (usersError) {
+        alert(usersError.message);
+        return;
+      }
+  
 
       const processedFriends = friendsData.map(friend => {
-        const friendUser = friend.requester_id === userData.user.id ? friend.recipient : friend.requester;
+        const requester = usersData.find(user => user.id === friend.requester_id);
+        const recipient = usersData.find(user => user.id === friend.recipient_id);
+        const friendUser = friend.requester_id === userData.user.id ? recipient : requester;
+  
         return {
           id: friendUser.id,
           name: friendUser.name,
           status: friend.status,
         };
       });
-
+  
       setFriends(processedFriends);
     };
-
+  
     fetchUserAndFriends();
   }, []);
+  
+  
 
   const addFriend = async () => {
     if (!friendId) {
